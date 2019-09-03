@@ -1,0 +1,6 @@
+name: megatick
+dependencies:
+  - python>=3
+  - pip
+  - pip:
+    - tweepy
