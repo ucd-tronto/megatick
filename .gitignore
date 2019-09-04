@@ -1,4 +1,5 @@
-# project noodling
+# project specific
+config.ini
 analysis/
 .password
 
