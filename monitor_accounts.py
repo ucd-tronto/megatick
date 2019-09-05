@@ -1,33 +1,42 @@
 #!/usr/bin/python3
 
 import configparser
+
 import tweepy
-from megatick import listeners
+
+from megatick.listeners import UserStreamListener
 
 def main():
-    # load configuration
+    """Monitor a pre-determined list of Twitter accounts."""
+    # get list of users
     config = configparser.ConfigParser()
     config.read('config.ini')
+    users = []
+    with open(config['DEFAULT']['usersLoc'], 'r') as user_file:
+        users = [line.strip() for line in user_file]
 
-    # output location for tweets
-    tweets_loc = config['tweetsLoc']
+    # load credentials
+    credentials = configparser.ConfigParser()
+    credentials.read('credentials.ini')
 
     # authorize our API
-    consumer_key = config['consumerKey']
-    consumer_secret = config['consumerSecret']
+    consumer_key = credentials['DEFAULT']['consumerKey']
+    consumer_secret = credentials['DEFAULT']['consumerSecret']
     auth = tweepy.OAuthHandler(consumer_key, consumer_secret)
-    auth_token = config['authToken']
-    auth_secret = config['authSecret']
+    auth_token = credentials['DEFAULT']['authToken']
+    auth_secret = credentials['DEFAULT']['authSecret']
     auth.set_access_token(auth_token, auth_secret)
 
     # initialize API
-    api = tweepy.API(auth)
+    api = tweepy.API(auth,
+                     wait_on_rate_limit=True,
+                     wait_on_rate_limit_notify=True)
 
     # access user stream for selected user(s)
-    userStreamListener = UserStreamListener()
-    userStream = tweepy.Stream(auth = api.auth, listener=userStreamListener)
+    user_stream_listener = UserStreamListener()
+    user_stream = tweepy.Stream(auth=api.auth, listener=user_stream_listener)
 
-    userStream.filter(follow=config['users'])
+    user_stream.filter(follow=users)
 
 if __name__ == '__main__':
     main()

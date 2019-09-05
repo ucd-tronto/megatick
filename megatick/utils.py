@@ -1,3 +1,7 @@
+"""
+Support functions for megatick modules.
+"""
+
 def get_full_text(status):
     """Return the full text of a tweet, regardless of its length"""
     # Check if the tweet is extended (> 140 characters)
