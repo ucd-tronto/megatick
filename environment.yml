@@ -2,5 +2,7 @@ name: megatick
 dependencies:
   - python>=3
   - pip
+  - pylint
   - pip:
+    - beautifulsoup4
     - tweepy
