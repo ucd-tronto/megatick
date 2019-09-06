@@ -4,20 +4,20 @@ import configparser
 
 import tweepy
 
-from megatick.listeners import UserStreamListener
+from megatick.listeners import KeywordStreamListener
 
 def main():
-    """Monitor a pre-determined list of Twitter accounts."""
-    # get list of users
+    """Monitor a pre-determined list of keywords on Twitter."""
+    # get list of keywords
     config = configparser.ConfigParser()
     config.read('config.ini')
-    users = []
-    with open(config['DEFAULT']['usersLoc'], 'r') as user_file:
-        users = [line.strip() for line in user_file]
+    keywords = []
+    with open(config['DEFAULT']['keywordsLoc'], 'r') as kw_file:
+        keywords = [line.strip() for line in kw_file]
 
     # load credentials
     credentials = configparser.ConfigParser()
-    credentials.read('user-credentials.ini')
+    credentials.read('keyword-credentials.ini')
 
     # authorize our API
     consumer_key = credentials['DEFAULT']['consumerKey']
@@ -32,11 +32,11 @@ def main():
                      wait_on_rate_limit=True,
                      wait_on_rate_limit_notify=True)
 
-    # access user stream for selected user(s)
-    user_stream_listener = UserStreamListener()
-    user_stream = tweepy.Stream(auth=api.auth, listener=user_stream_listener)
+    # access keyword stream for selected keyword(s)
+    kw_stream_listener = KeywordStreamListener()
+    kw_stream = tweepy.Stream(auth=api.auth, listener=kw_stream_listener)
 
-    user_stream.filter(follow=users)
+    kw_stream.filter(track=keywords)
 
 if __name__ == '__main__':
     main()

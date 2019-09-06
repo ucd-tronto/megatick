@@ -10,65 +10,27 @@ import time
 
 import tweepy
 
-from megatick.utils import get_full_text
+from megatick.utils import get_full_text, is_notable
 
-class UserStreamListener(tweepy.StreamListener):
-    """A tweepy StreamListener for following users."""
-
+class MegatickStreamListener(tweepy.StreamListener):
+    """
+    A tweepy StreamListener with custom error handling. This class should be
+    extended, not instantiated.
+    """
     def __init__(self, api=None):
-        """Establishes output location and creates header"""
-        super(UserStreamListener, self).__init__()
-
+        """Boilerplate init"""
+        super().__init__()
         # set the api
         self.api = api
 
         # load configuration
         config = configparser.ConfigParser()
         config.read('config.ini')
-        output_location = config['DEFAULT']['tweetsLoc']
+        self.output_location = config['DEFAULT']['tweetsLoc']
 
-        # create a file with the current datetime
+        # establish a filename with the current datetime
         filename = 'tweets_' + time.strftime('%Y-%m-%dT%H-%M-%S')+'.csv'
-        self.filename = os.path.join(output_location, filename)
-        # Create a new file with that filename
-        csv_file = open(self.filename, 'w')
-
-        # create a csv writer
-        csv_writer = csv.writer(csv_file)
-
-        # write a single row with the headers of the columns
-        csv_writer.writerow(['text',
-                             'created_at',
-                             'geo',
-                             'lang',
-                             'place',
-                             'coordinates',
-                             'user.favourites_count',
-                             'user.statuses_count',
-                             'user.description',
-                             'user.location',
-                             'user.id',
-                             'user.created_at',
-                             'user.verified',
-                             'user.following',
-                             'user.url',
-                             'user.listed_count',
-                             'user.followers_count',
-                             'user.default_profile_image',
-                             'user.utc_offset',
-                             'user.friends_count',
-                             'user.default_profile',
-                             'user.name',
-                             'user.lang',
-                             'user.screen_name',
-                             'user.geo_enabled',
-                             'user.time_zone',
-                             'id',
-                             'favorite_count',
-                             'retweeted',
-                             'source',
-                             'favorited',
-                             'retweet_count'])
+        self.filename = os.path.join(self.output_location, filename)
 
     def on_status(self, status):
         """
@@ -77,6 +39,9 @@ class UserStreamListener(tweepy.StreamListener):
         Args:
             status: a tweet with metadata
         """
+        if not is_notable(status):
+            return
+
         full_text = get_full_text(status)
 
         # Open the csv file created previously
@@ -164,3 +129,104 @@ class UserStreamListener(tweepy.StreamListener):
 
         # Continue mining tweets
         return True
+
+class UserStreamListener(MegatickStreamListener):
+    """A tweepy StreamListener for following users."""
+
+    def __init__(self, api=None):
+        """Establishes output location and creates header"""
+        super().__init__(api)
+
+        # create a file with the current datetime
+        filename = 'user_tweets_' + time.strftime('%Y-%m-%dT%H-%M-%S')+'.csv'
+        self.filename = os.path.join(self.output_location, filename)
+        # Create a new file with that filename
+        csv_file = open(self.filename, 'w')
+
+        # create a csv writer
+        csv_writer = csv.writer(csv_file)
+
+        # write a single row with the headers of the columns
+        csv_writer.writerow(['text',
+                             'created_at',
+                             'geo',
+                             'lang',
+                             'place',
+                             'coordinates',
+                             'user.favourites_count',
+                             'user.statuses_count',
+                             'user.description',
+                             'user.location',
+                             'user.id',
+                             'user.created_at',
+                             'user.verified',
+                             'user.following',
+                             'user.url',
+                             'user.listed_count',
+                             'user.followers_count',
+                             'user.default_profile_image',
+                             'user.utc_offset',
+                             'user.friends_count',
+                             'user.default_profile',
+                             'user.name',
+                             'user.lang',
+                             'user.screen_name',
+                             'user.geo_enabled',
+                             'user.time_zone',
+                             'id',
+                             'favorite_count',
+                             'retweeted',
+                             'source',
+                             'favorited',
+                             'retweet_count'])
+
+class KeywordStreamListener(MegatickStreamListener):
+    """A tweepy StreamListener for following keywords."""
+
+    def __init__(self, api=None):
+        """Establishes output location and creates header"""
+        super().__init__(api)
+
+        # create a file with the current datetime
+        current_time = time.strftime('%Y-%m-%dT%H-%M-%S')
+        filename = 'keyword_tweets_%s.csv' % (current_time)
+        self.filename = os.path.join(self.output_location, filename)
+        # Create a new file with that filename
+        csv_file = open(self.filename, 'w')
+
+        # create a csv writer
+        csv_writer = csv.writer(csv_file)
+
+        # write a single row with the headers of the columns
+        csv_writer.writerow(['text',
+                             'created_at',
+                             'geo',
+                             'lang',
+                             'place',
+                             'coordinates',
+                             'user.favourites_count',
+                             'user.statuses_count',
+                             'user.description',
+                             'user.location',
+                             'user.id',
+                             'user.created_at',
+                             'user.verified',
+                             'user.following',
+                             'user.url',
+                             'user.listed_count',
+                             'user.followers_count',
+                             'user.default_profile_image',
+                             'user.utc_offset',
+                             'user.friends_count',
+                             'user.default_profile',
+                             'user.name',
+                             'user.lang',
+                             'user.screen_name',
+                             'user.geo_enabled',
+                             'user.time_zone',
+                             'id',
+                             'favorite_count',
+                             'retweeted',
+                             'source',
+                             'favorited',
+                             'retweet_count'])

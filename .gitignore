@@ -1,5 +1,5 @@
 # project specific
-credentials.ini
+*.ini
 analysis/
 .password
 users.txt
