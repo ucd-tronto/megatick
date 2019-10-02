@@ -5,4 +5,6 @@ __version__ = '0.0.1'
 __author__ = 'Dane Bell'
 __license__ = 'MIT'
 
-from megatick.listeners import UserStreamListener
+from megatick import listeners
+from megatick import nodes
+from megatick import relations
