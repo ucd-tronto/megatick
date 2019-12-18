@@ -10,40 +10,51 @@ import sys
 import time
 
 from http.client import IncompleteRead as http_incompleteRead
+from queue import Queue
 from urllib3.exceptions import IncompleteRead as urllib3_incompleteRead
+from threading import Thread
 
 import tweepy
 
-from megatick.utils import get_full_text, is_notable
+from megatick.utils import get_full_text, get_urls, is_notable, create_twitter_auth
 from megatick.nodes import Tweet, TwitterUser
-from megatick.relations import Authored
+from megatick.relations import AUTHORED
+from megatick.site import add_urls
 
 class MegatickStreamListener(tweepy.StreamListener):
     """
     A tweepy StreamListener with custom error handling.
     """
-    def __init__(self, graph=None, prefix=None):
+    def __init__(self, api=None, graph=None, prefix=None):
         """Initialize MegatickStreamListener"""
-        super().__init__()
+        super().__init__(api=api)
         print("Initializing listener")
+
+        # load configuration
+        config = configparser.ConfigParser()
+        config.read('config.ini')
+
+        # Neo4j database graph or None
         self.graph = graph
-        self.output_location = None
-        self.filename = None
+
+        # status_queue (single-threaded) for handling tweets as they come in
+        # without binding up
+        self.status_queue = Queue(maxsize=0)
+        self.status_thread = Thread(target=self.record_status)
+        self.status_thread.start()
 
         # if no graph, then print header to csv
         if self.graph is None:
-            # load configuration
-            config = configparser.ConfigParser()
-            config.read('config.ini')
-            self.output_location = config['DEFAULT']['tweetsLoc']
+            output_location = config['DEFAULT']['tweetsLoc']
+            print('printing csv to ' + output_location)
 
             # establish a filename with the current datetime
-            self.filename = time.strftime('%Y-%m-%dT%H-%M-%S') + '.csv'
+            filename = time.strftime('%Y-%m-%dT%H-%M-%S') + '.csv'
             if prefix is not None:
-                self.filename = prefix + '_' + self.filename
+                filename = prefix + '_' + filename
 
             # Create a new file with that filename
-            csv_file = open(os.path.join(self.output_location, self.filename), 'w')
+            csv_file = open(os.path.join(output_location, filename), 'w')
 
             # create a csv writer
             self.csv_writer = csv.writer(csv_file)
@@ -81,6 +92,21 @@ class MegatickStreamListener(tweepy.StreamListener):
                                       'source',
                                       'favorited',
                                       'retweet_count'])
+        # when using Neo4j graph, also retrieve sites and twitter threads
+        else:
+            print('Using Neo4j')
+            self.thread_queue = Queue(maxsize=0)
+            self.thread_thread = Thread(target=self.get_thread)
+            self.thread_thread.start()
+
+            self.url_queue = Queue(maxsize=0)
+            self.url_threads = []
+            num_url_threads = int(config['DEFAULT']['numThreads'])
+            for i in range(num_url_threads):
+                thread = Thread(target=self.add_tweet_citations)
+                thread.start()
+                self.url_threads.append(thread)
+
 
     # see https://github.com/tweepy/tweepy/issues/908#issuecomment-373840687
     def on_data(self, raw_data):
@@ -108,99 +134,15 @@ class MegatickStreamListener(tweepy.StreamListener):
 
     def on_status(self, status):
         """
-        When a status is posted, records it.
+        When a status is posted, sends it to a queue for recording.
+        Using a queue prevents back-ups from high volume.
 
         Args:
             status: a tweet with metadata
         """
         print("found tweet")
-
-        if not is_notable(status):
-            return
-
-        full_text = get_full_text(status)
-
-        # If no Neo4j graph,
-        if self.graph is None:
-            try:
-                # Write the tweet's information to the csv file
-                self.csv_writer.writerow([full_text,
-                                          status.created_at,
-                                          status.geo,
-                                          status.lang,
-                                          status.place,
-                                          status.coordinates,
-                                          status.user.favourites_count,
-                                          status.user.statuses_count,
-                                          status.user.description,
-                                          status.user.location,
-                                          status.user.id,
-                                          status.user.created_at,
-                                          status.user.verified,
-                                          status.user.following,
-                                          status.user.url,
-                                          status.user.listed_count,
-                                          status.user.followers_count,
-                                          status.user.default_profile_image,
-                                          status.user.utc_offset,
-                                          status.user.friends_count,
-                                          status.user.default_profile,
-                                          status.user.name,
-                                          status.user.lang,
-                                          status.user.screen_name,
-                                          status.user.geo_enabled,
-                                          status.user.time_zone,
-                                          status.id_str,
-                                          status.favorite_count,
-                                          status.retweeted,
-                                          status.source,
-                                          status.favorited,
-                                          status.retweet_count])
-            # If some error occurs
-            except Exception as error:
-                # print the error
-                print(error)
-
-        else:
-            print("putting it in neo4j")
-            tweet = Tweet(status.id,
-                          full_text,
-                          status.created_at,
-                          status.geo,
-                          status.lang,
-                          status.coordinates,
-                          status.favorite_count,
-                          status.retweeted,
-                          status.source,
-                          status.favorited,
-                          status.retweet_count)
-            tweet.add_to(self.graph)
-
-            user = TwitterUser(status.user.id,
-                               status.user.screen_name,
-                               status.user.name,
-                               status.user.created_at,
-                               status.user.url,
-                               status.user.favourites_count,
-                               status.user.statuses_count,
-                               status.user.description,
-                               status.user.location,
-                               status.user.verified,
-                               status.user.following,
-                               status.user.listed_count,
-                               status.user.followers_count,
-                               status.user.default_profile_image,
-                               status.user.utc_offset,
-                               status.user.friends_count,
-                               status.user.default_profile,
-                               status.user.lang,
-                               status.user.geo_enabled,
-                               status.user.time_zone)
-            user.add_to(self.graph)
-
-            authored = Authored(user, tweet)
-            # authored.add_to(self.graph)
-            self.graph.merge(authored)
+        self.status_queue.put(status)
+        print(str(len(self.status_queue.queue)) + ' items in status_queue')
 
     def on_error(self, status_code):
         """Print error codes as they occur"""
@@ -239,3 +181,180 @@ class MegatickStreamListener(tweepy.StreamListener):
 
         # Continue mining tweets
         return True
+
+    def get_thread(self):
+        """
+        Given a Tweet object and its parent (either the tweet it's a
+        quote-tweet of, or the tweet it's a reply to), find the parent (and
+        its parents, recursively) and link the tweet to its parent.
+        """
+        # Time between requests to avoid overrunning rate limit
+        # TODO: should be config
+        # TODO: does tweepy do this for us?
+        show_rate_limit = 1.01
+        
+        while True:
+            # get next tweet and parent ID from queue
+            tweet, prev_id = self.thread_queue.get()
+
+            try:
+                # sleep first in case next line throws an error
+                time.sleep(show_rate_limit)
+                # ask for status using GET statuses/show/:id
+                # TODO: batch these to get up to 100 using statuses/lookup
+                status = self.api.get_status(prev_id)
+            except TweepError:
+                # no available status at that ID (deleted or nonexistent)
+                self.thread_queue.task_done()
+                continue
+
+            # sanity check for content
+            if hasattr(status, 'user'):
+                full_text = get_full_text(status)
+                # recursive call records this status and asks for more parents
+                self.write_status_to_neo4j(status, full_text)
+
+            self.thread_queue.task_done()
+
+    def record_status(self):
+        """
+        Pulls a status from the queue and records it.
+        """
+        while True:
+            status = self.status_queue.get()
+            print('writing ' + str(status.id))
+
+            # check for notability, currently hardcoded as English and not RT
+            # TODO: make this modular to allow ML models of notability
+            if not is_notable(status):
+                print('not notable')
+                continue
+
+            # If no Neo4j graph, write to csv
+            if self.graph is None:
+                try:
+                    self.write_status_to_csv(status)
+                except Exception as error:
+                    print(error)
+
+            # Neo4j graph is available, so write to it
+            else:
+                self.write_status_to_neo4j(status)
+
+            # in case we need side effects for finishing a task, mark complete
+            self.status_queue.task_done()
+
+    def add_tweet_citations(self):
+        while True:
+            tweet, urls = self.url_queue.get()
+            add_urls(self.graph, tweet, urls)
+
+            self.url_queue.task_done()
+
+    def write_status_to_csv(self, status):
+        full_text = get_full_text(status)
+
+        # Write the tweet's information to the csv file
+        self.csv_writer.writerow([full_text,
+                                  status.created_at,
+                                  status.geo,
+                                  status.lang,
+                                  status.place,
+                                  status.coordinates,
+                                  status.user.favourites_count,
+                                  status.user.statuses_count,
+                                  status.user.description,
+                                  status.user.location,
+                                  status.user.id,
+                                  status.user.created_at,
+                                  status.user.verified,
+                                  status.user.following,
+                                  status.user.url,
+                                  status.user.listed_count,
+                                  status.user.followers_count,
+                                  status.user.default_profile_image,
+                                  status.user.utc_offset,
+                                  status.user.friends_count,
+                                  status.user.default_profile,
+                                  status.user.name,
+                                  status.user.lang,
+                                  status.user.screen_name,
+                                  status.user.geo_enabled,
+                                  status.user.time_zone,
+                                  status.id_str,
+                                  status.favorite_count,
+                                  status.retweeted,
+                                  status.source,
+                                  status.favorited,
+                                  status.retweet_count])
+
+    def write_status_to_neo4j(self, status):
+        """
+        Given a JSON rep of a status, add it to the Neo4j database (or update)
+        """
+        full_text = get_full_text(status)
+        urls = get_urls(status)
+
+        tweet = Tweet(status.id,
+                      full_text,
+                      status.created_at,
+                      status.geo,
+                      status.lang,
+                      status.coordinates,
+                      status.favorite_count,
+                      status.retweeted,
+                      status.source,
+                      status.favorited,
+                      status.retweet_count,
+                      urls)
+        tweet.add_to(self.graph)
+        print('added tweet')
+        user = TwitterUser(status.user.id,
+                           status.user.screen_name,
+                           status.user.name,
+                           status.user.created_at,
+                           status.user.url,
+                           status.user.favourites_count,
+                           status.user.statuses_count,
+                           status.user.description,
+                           status.user.location,
+                           status.user.verified,
+                           status.user.following,
+                           status.user.listed_count,
+                           status.user.followers_count,
+                           status.user.default_profile_image,
+                           status.user.utc_offset,
+                           status.user.friends_count,
+                           status.user.default_profile,
+                           status.user.lang,
+                           status.user.geo_enabled,
+                           status.user.time_zone)
+        user.add_to(self.graph)
+        print('added author')
+        authored = AUTHORED(user, tweet)
+        self.graph.merge(authored)
+
+        if len(urls) > 0:
+            # add url to scrape queue
+            # NB: must be a pipe because we only have so much network
+            #  bandwidth, but must be non-blocking so that this stream can
+            #  continue
+            print('adding ' + str(len(urls)) + ' urls')
+            self.url_queue.put((tweet, urls))
+            print(str(len(self.url_queue.queue)) + ' items in url_queue')
+
+        if status.is_quote_status:
+            # add upstream quote-tweet thread to download pipe
+            # NB: must be a pipe because of rate limiting, but must be non-
+            #  blocking so that this stream can continue
+            prev_id = status.quoted_status_id
+            self.thread_queue.put((tweet, prev_id))
+            print(str(len(self.thread_queue.queue)) + ' items in thread_queue')
+
+        if status.in_reply_to_status_id is not None:
+            # add upstream tweet reply thread to download pipe
+            # NB: must be a pipe because of rate limiting, but must be non-
+            #  blocking so that this stream can continue
+            prev_id = status.in_reply_to_status_id
+            self.thread_queue.put((tweet, prev_id))
+            print(str(len(self.thread_queue.queue)) + ' items in thread_queue')

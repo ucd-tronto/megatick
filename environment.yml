@@ -1,9 +1,14 @@
 name: megatick
 dependencies:
-  - python>=3
+  - python>=3.7
   - pip
   - pylint
   - pip:
     - beautifulsoup4
+    - feedparser
+    - markdownify
+    - pandas
+    - praw
     - py2neo
+    - requests
     - tweepy

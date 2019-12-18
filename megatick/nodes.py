@@ -1,11 +1,11 @@
-"""
+'''
 Nodes of the Megatick Neo4j graph
-"""
+'''
 
 from py2neo import Node
 
 class Tweet(Node):
-    """Tweet Node with required parameters"""
+    '''Tweet Node with required parameters'''
     def __init__(self,
                  tweet_id,
                  text,
@@ -17,8 +17,9 @@ class Tweet(Node):
                  retweeted,
                  source,
                  favorited,
-                 retweet_count):
-        super().__init__("Tweet",
+                 retweet_count,
+                 urls):
+        super().__init__('Tweet',
                          tweet_id=tweet_id,
                          text=text,
                          created_at=created_at,
@@ -29,16 +30,17 @@ class Tweet(Node):
                          retweeted=retweeted,
                          source=source,
                          favorited=favorited,
-                         retweet_count=retweet_count)
+                         retweet_count=retweet_count,
+                         urls=urls)
 
     def add_to(self, graph):
-        """
+        '''
         Add this node to an existing graph, or update it if it already exists.
-        """
-        return graph.merge(self, "Tweet", "tweet_id")
+        '''
+        return graph.merge(self, 'Tweet', 'tweet_id')
 
 class TwitterUser(Node):
-    """TwitterUser with required parameters"""
+    '''TwitterUser with required parameters'''
     def __init__(self,
                  user_id,
                  handle,
@@ -60,7 +62,7 @@ class TwitterUser(Node):
                  lang,
                  geo_enabled,
                  time_zone):
-        super().__init__("TwitterUser",
+        super().__init__('TwitterUser',
                          user_id=user_id,
                          handle=handle,
                          user_name=user_name,
@@ -83,7 +85,22 @@ class TwitterUser(Node):
                          time_zone=time_zone)
 
     def add_to(self, graph):
-        """
+        '''
         Add this node to an existing graph, or update it if it already exists.
-        """
-        return graph.merge(self, "TwitterUser", "user_id")
+        '''
+        return graph.merge(self, 'TwitterUser', 'user_id')
+
+class WebPage(Node):
+    '''WebPage with required parameters'''
+    def __init__(self,
+                 url,
+                 content):
+        super().__init__('WebPage',
+                         url=url,
+                         content=content)
+
+    def add_to(self, graph):
+        '''
+        Add this node to an existing graph, or update it if it already exists.
+        '''
+        return graph.merge(self, 'WebPage', 'url')

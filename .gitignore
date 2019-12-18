@@ -1,5 +1,6 @@
 # project specific
 *.ini
+*.bak
 analysis/
 .password
 users.txt
