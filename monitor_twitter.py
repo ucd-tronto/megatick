@@ -33,6 +33,7 @@ def main():
         graph = None
 
     # authorize our API
+    # TODO: get file location from config
     auth = create_twitter_auth('twitter-credentials.ini')
 
     # initialize API

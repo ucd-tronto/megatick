@@ -94,7 +94,6 @@ class MegatickStreamListener(tweepy.StreamListener):
                                       'retweet_count'])
         # when using Neo4j graph, also retrieve sites and twitter threads
         else:
-            print('Using Neo4j')
             self.thread_queue = Queue(maxsize=0)
             self.thread_thread = Thread(target=self.get_thread)
             self.thread_thread.start()
@@ -142,7 +141,7 @@ class MegatickStreamListener(tweepy.StreamListener):
         """
         print("found tweet")
         self.status_queue.put(status)
-        print(str(len(self.status_queue.queue)) + ' items in status_queue')
+        # print(str(len(self.status_queue.queue)) + ' items in status_queue')
 
     def on_error(self, status_code):
         """Print error codes as they occur"""
@@ -210,9 +209,8 @@ class MegatickStreamListener(tweepy.StreamListener):
 
             # sanity check for content
             if hasattr(status, 'user'):
-                full_text = get_full_text(status)
                 # recursive call records this status and asks for more parents
-                self.write_status_to_neo4j(status, full_text)
+                self.write_status_to_neo4j(status)
 
             self.thread_queue.task_done()
 
@@ -222,12 +220,12 @@ class MegatickStreamListener(tweepy.StreamListener):
         """
         while True:
             status = self.status_queue.get()
-            print('writing ' + str(status.id))
+            # print('writing ' + str(status.id))
 
             # check for notability, currently hardcoded as English and not RT
             # TODO: make this modular to allow ML models of notability
             if not is_notable(status):
-                print('not notable')
+                # print('not notable, language=' + status.lang + ' ' + status.text[0:20])
                 continue
 
             # If no Neo4j graph, write to csv
@@ -308,7 +306,7 @@ class MegatickStreamListener(tweepy.StreamListener):
                       status.retweet_count,
                       urls)
         tweet.add_to(self.graph)
-        print('added tweet')
+        # print('added tweet')
         user = TwitterUser(status.user.id,
                            status.user.screen_name,
                            status.user.name,
@@ -330,7 +328,7 @@ class MegatickStreamListener(tweepy.StreamListener):
                            status.user.geo_enabled,
                            status.user.time_zone)
         user.add_to(self.graph)
-        print('added author')
+        # print('added author')
         authored = AUTHORED(user, tweet)
         self.graph.merge(authored)
 
@@ -341,7 +339,7 @@ class MegatickStreamListener(tweepy.StreamListener):
             #  continue
             print('adding ' + str(len(urls)) + ' urls')
             self.url_queue.put((tweet, urls))
-            print(str(len(self.url_queue.queue)) + ' items in url_queue')
+            # print(str(len(self.url_queue.queue)) + ' items in url_queue')
 
         if status.is_quote_status:
             # add upstream quote-tweet thread to download pipe
@@ -349,7 +347,7 @@ class MegatickStreamListener(tweepy.StreamListener):
             #  blocking so that this stream can continue
             prev_id = status.quoted_status_id
             self.thread_queue.put((tweet, prev_id))
-            print(str(len(self.thread_queue.queue)) + ' items in thread_queue')
+            # print(str(len(self.thread_queue.queue)) + ' items in thread_queue')
 
         if status.in_reply_to_status_id is not None:
             # add upstream tweet reply thread to download pipe
@@ -357,4 +355,4 @@ class MegatickStreamListener(tweepy.StreamListener):
             #  blocking so that this stream can continue
             prev_id = status.in_reply_to_status_id
             self.thread_queue.put((tweet, prev_id))
-            print(str(len(self.thread_queue.queue)) + ' items in thread_queue')
+            # print(str(len(self.thread_queue.queue)) + ' items in thread_queue')
