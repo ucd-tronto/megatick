@@ -40,8 +40,8 @@ class MegatickStreamListener(tweepy.StreamListener):
         # status_queue (single-threaded) for handling tweets as they come in
         # without binding up
         self.status_queue = Queue(maxsize=0)
-        self.status_thread = Thread(target=self.record_status)
-        self.status_thread.start()
+        status_thread = Thread(target=self.record_status)
+        status_thread.start()
 
         # if no graph, then print header to csv
         if self.graph is None:
@@ -95,17 +95,16 @@ class MegatickStreamListener(tweepy.StreamListener):
         # when using Neo4j graph, also retrieve sites and twitter threads
         else:
             self.thread_queue = Queue(maxsize=0)
-            self.thread_thread = Thread(target=self.get_thread)
-            self.thread_thread.start()
+            thread_thread = Thread(target=self.get_thread)
+            thread_thread.start()
 
             self.url_queue = Queue(maxsize=0)
-            self.url_threads = []
+            url_threads = []
             num_url_threads = int(config['DEFAULT']['numThreads'])
             for i in range(num_url_threads):
                 thread = Thread(target=self.add_tweet_citations)
                 thread.start()
-                self.url_threads.append(thread)
-
+                url_threads.append(thread)
 
     # see https://github.com/tweepy/tweepy/issues/908#issuecomment-373840687
     def on_data(self, raw_data):
@@ -191,7 +190,7 @@ class MegatickStreamListener(tweepy.StreamListener):
         # TODO: should be config
         # TODO: does tweepy do this for us?
         show_rate_limit = 1.01
-        
+
         while True:
             # get next tweet and parent ID from queue
             tweet, prev_id = self.thread_queue.get()
