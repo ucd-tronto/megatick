@@ -32,7 +32,7 @@ class MegatickStreamListener(tweepy.StreamListener):
 
         # load configuration
         config = configparser.ConfigParser()
-        config.read('config.ini')
+        config.read("config.ini")
 
         # Neo4j database graph or None
         self.graph = graph
@@ -43,55 +43,60 @@ class MegatickStreamListener(tweepy.StreamListener):
         status_thread = Thread(target=self.record_status)
         status_thread.start()
 
+        self.user_blacklist = None
+        if config.has_option("DEFAULT", "twitterUserBlacklistLoc"):
+            with open(config["DEFAULT"]["twitterUserBlacklistLoc"], "r") as bl_file:
+                self.user_blacklist = [line.strip() for line in bl_file]
+
         # if no graph, then print header to csv
         if self.graph is None:
-            output_location = config['DEFAULT']['tweetsLoc']
-            print('printing csv to ' + output_location)
+            output_location = config["DEFAULT"]["tweetsLoc"]
+            print("printing csv to " + output_location)
 
             # establish a filename with the current datetime
-            filename = time.strftime('%Y-%m-%dT%H-%M-%S') + '.csv'
+            filename = time.strftime("%Y-%m-%dT%H-%M-%S") + ".csv"
             if prefix is not None:
-                filename = prefix + '_' + filename
+                filename = prefix + "_" + filename
 
             # Create a new file with that filename
-            self.csv_file = open(os.path.join(output_location, filename), 'w')
+            self.csv_file = open(os.path.join(output_location, filename), "w")
 
             # create a csv writer
             self.csv_writer = csv.writer(self.csv_file)
 
             # write a single row with the headers of the columns
-            self.csv_writer.writerow(['text',
-                                      'created_at',
-                                      'geo',
-                                      'lang',
-                                      'place',
-                                      'coordinates',
-                                      'user.favourites_count',
-                                      'user.statuses_count',
-                                      'user.description',
-                                      'user.location',
-                                      'user.id',
-                                      'user.created_at',
-                                      'user.verified',
-                                      'user.following',
-                                      'user.url',
-                                      'user.listed_count',
-                                      'user.followers_count',
-                                      'user.default_profile_image',
-                                      'user.utc_offset',
-                                      'user.friends_count',
-                                      'user.default_profile',
-                                      'user.name',
-                                      'user.lang',
-                                      'user.screen_name',
-                                      'user.geo_enabled',
-                                      'user.time_zone',
-                                      'id',
-                                      'favorite_count',
-                                      'retweeted',
-                                      'source',
-                                      'favorited',
-                                      'retweet_count'])
+            self.csv_writer.writerow(["text",
+                                      "created_at",
+                                      "geo",
+                                      "lang",
+                                      "place",
+                                      "coordinates",
+                                      "user.favourites_count",
+                                      "user.statuses_count",
+                                      "user.description",
+                                      "user.location",
+                                      "user.id",
+                                      "user.created_at",
+                                      "user.verified",
+                                      "user.following",
+                                      "user.url",
+                                      "user.listed_count",
+                                      "user.followers_count",
+                                      "user.default_profile_image",
+                                      "user.utc_offset",
+                                      "user.friends_count",
+                                      "user.default_profile",
+                                      "user.name",
+                                      "user.lang",
+                                      "user.screen_name",
+                                      "user.geo_enabled",
+                                      "user.time_zone",
+                                      "id",
+                                      "favorite_count",
+                                      "retweeted",
+                                      "source",
+                                      "favorited",
+                                      "retweet_count"])
 
             # flush to force writing
             self.csv_file.flush()
@@ -104,11 +109,15 @@ class MegatickStreamListener(tweepy.StreamListener):
 
             self.url_queue = Queue(maxsize=0)
             url_threads = []
-            num_url_threads = int(config['DEFAULT']['numThreads'])
+            num_url_threads = int(config["DEFAULT"]["numUrlThreads"])
             for i in range(num_url_threads):
                 thread = Thread(target=self.add_tweet_citations)
                 thread.start()
                 url_threads.append(thread)
+            self.domain_blacklist = None
+            if config.has_option("DEFAULT", "domainBlacklistLoc"):
+                with open(config["DEFAULT"]["domainBlacklistLoc"], "r") as bl_file:
+                    self.domain_blaclist = [line.strip() for line in bl_file]
 
     # see https://github.com/tweepy/tweepy/issues/908#issuecomment-373840687
     def on_data(self, raw_data):
@@ -144,11 +153,11 @@ class MegatickStreamListener(tweepy.StreamListener):
         """
         print("found tweet")
         self.status_queue.put(status)
-        # print(str(len(self.status_queue.queue)) + ' items in status_queue')
+        # print(str(len(self.status_queue.queue)) + " items in status_queue")
 
     def on_error(self, status_code):
         """Print error codes as they occur"""
-        print('Encountered error with status code:', status_code)
+        print("Encountered error with status code:", status_code)
 
         # End the stream if the error code is 401 (bad credentials)
         if status_code == 401:
@@ -176,7 +185,7 @@ class MegatickStreamListener(tweepy.StreamListener):
         """Sleep and retry when timed out."""
 
         # Print timeout message
-        print(sys.stderr, 'Timeout...')
+        print(sys.stderr, "Timeout...")
 
         # Wait 10 seconds
         time.sleep(10)
@@ -225,17 +234,18 @@ class MegatickStreamListener(tweepy.StreamListener):
         """
         while True:
             status = self.status_queue.get()
-            # print('writing ' + str(status.id))
+            # print("writing " + str(status.id))
 
             # check for notability, currently hardcoded as English and not RT
             # TODO: make this modular to allow ML models of notability
-            if not is_notable(status):
-                # print('not notable, language=' + status.lang + ' ' + status.text[0:20])
+            if not is_notable(status, blacklist=self.user_blacklist):
+                # print("not notable, language=" + status.lang + " " + status.text[0:100])
                 continue
 
             # If no Neo4j graph, write to csv
             if self.graph is None:
                 try:
+                    # print("trying to write " + str(status.id) + " to csv")
                     self.write_status_to_csv(status)
                 except Exception as error:
                     print(error)
@@ -248,13 +258,14 @@ class MegatickStreamListener(tweepy.StreamListener):
             self.status_queue.task_done()
 
     def add_tweet_citations(self):
+        """Pull a tweet's URLs from the queue to download"""
         while True:
             tweet, urls = self.url_queue.get()
-            add_urls(self.graph, tweet, urls)
-
+            add_urls(self.graph, tweet, urls, self.domain_blacklist)
             self.url_queue.task_done()
 
     def write_status_to_csv(self, status):
+        """Write a status in flat format (not following links)"""
         full_text = get_full_text(status)
 
         # Write the tweet's information to the csv file
@@ -314,7 +325,7 @@ class MegatickStreamListener(tweepy.StreamListener):
                       status.retweet_count,
                       urls)
         tweet.add_to(self.graph)
-        # print('added tweet')
+        # print("added tweet")
         user = TwitterUser(status.user.id,
                            status.user.screen_name,
                            status.user.name,
@@ -336,7 +347,7 @@ class MegatickStreamListener(tweepy.StreamListener):
                            status.user.geo_enabled,
                            status.user.time_zone)
         user.add_to(self.graph)
-        # print('added author')
+        # print("added author")
         authored = AUTHORED(user, tweet)
         self.graph.merge(authored)
 
@@ -345,9 +356,9 @@ class MegatickStreamListener(tweepy.StreamListener):
             # NB: must be a pipe because we only have so much network
             #  bandwidth, but must be non-blocking so that this stream can
             #  continue
-            print('adding ' + str(len(urls)) + ' urls')
+            print("adding " + str(len(urls)) + " urls")
             self.url_queue.put((tweet, urls))
-            # print(str(len(self.url_queue.queue)) + ' items in url_queue')
+            # print(str(len(self.url_queue.queue)) + " items in url_queue")
 
         if status.is_quote_status:
             # add upstream quote-tweet thread to download pipe
@@ -355,7 +366,7 @@ class MegatickStreamListener(tweepy.StreamListener):
             #  blocking so that this stream can continue
             prev_id = status.quoted_status_id
             self.thread_queue.put((tweet, prev_id))
-            # print(str(len(self.thread_queue.queue)) + ' items in thread_queue')
+            # print(str(len(self.thread_queue.queue)) + " items in thread_queue")
 
         if status.in_reply_to_status_id is not None:
             # add upstream tweet reply thread to download pipe
@@ -363,4 +374,4 @@ class MegatickStreamListener(tweepy.StreamListener):
             #  blocking so that this stream can continue
             prev_id = status.in_reply_to_status_id
             self.thread_queue.put((tweet, prev_id))
-            # print(str(len(self.thread_queue.queue)) + ' items in thread_queue')
+            # print(str(len(self.thread_queue.queue)) + " items in thread_queue")

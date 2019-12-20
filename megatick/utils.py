@@ -26,11 +26,18 @@ def get_urls(status):
         urls = []
     return urls
 
-def is_notable(status):
+def is_notable(status, blacklist=None):
     """Returns true if the status is to be recorded"""
     # TODO: this should optionally allow an external (e.g., machine-learning)
     #  model to make this decision.
-    return status.lang == 'en' and status.text[0:2] != 'RT'
+    non_rt = status.text[0:2] != 'RT'
+    if blacklist is None:
+        whitelisted = True
+    else:
+        whitelisted = status.user.id not in blacklist
+    # if not whitelisted:
+    #     print("blacklisted user " + status.user.name)
+    return non_rt and whitelisted
 
 def is_invalid(url):
     """

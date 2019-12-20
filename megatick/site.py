@@ -7,6 +7,7 @@ import requests
 from bs4 import BeautifulSoup as bs
 from markdownify import markdownify as md
 from py2neo import NodeMatcher
+from urllib.parse import urlparse
 
 from megatick.nodes import WebPage
 from megatick.relations import LINKS_TO
@@ -16,14 +17,15 @@ def site_exists(graph, url):
     '''Return True if content for this URL is already present'''
     matcher = NodeMatcher(graph)
     match = matcher.match("WebPage", url=url).first()
-    res = False
-    if match is not None:
-        res = True
-    return res
+    if match is None:
+        return False
+    else:
+        return True
 
 def retrieve_url(url):
     '''Retrieve the markdown version of a site given a URL'''
     content = None
+    # TODO: remove cruft at the end of URLs, e.g. site.com/bob.html?u=103&t=7
     if not is_invalid(url):
         try:
             response = requests.get(url)
@@ -46,15 +48,28 @@ def retrieve_url(url):
 
     return content
 
-def add_urls(graph, citer, citees):
+def add_urls(graph, citer, citees, blacklist=None):
     '''
     Add citees to graph and links citer to citees via LinksTo relations.
     Assumes citer is already in the graph.
     '''
+    # ignore previously downloaded sites
+    # TODO: consider recording and checking date, updating for old sites
     not_yet_cited = list(filter(lambda x: not site_exists(graph, x), citees))
 
+    # check against a list of blacklisted domains
+    if blacklist is None:
+        whitelisted = not_yet_cited
+    else:
+        whitelisted = [url for url in not_yet_cited 
+                       if urlparse(url).netloc not in blacklist]
+
+    # for url in not_yet_cited:
+    #     if url not in whitelisted:
+    #         print("excluded " + url)
+
     # retrieve the contents of the sites
-    contents = [(url, retrieve_url(url)) for url in not_yet_cited]
+    contents = [(url, retrieve_url(url)) for url in whitelisted]
 
     # add these sites to the graph
     for url, content in contents:
