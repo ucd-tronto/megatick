@@ -192,28 +192,30 @@ class MegatickStreamListener(tweepy.StreamListener):
         """
         # Time between requests to avoid overrunning rate limit
         # TODO: should be config
-        # TODO: does tweepy do this for us?
         show_rate_limit = 1.01
 
         while True:
             # get next tweet and parent ID from queue
-            tweet, prev_id = self.thread_queue.get()
+            later_status, earlier_id = self.thread_queue.get()
 
             try:
-                # sleep first in case next line throws an error
+                # sleep first to respect rate limit
                 time.sleep(show_rate_limit)
                 # ask for status using GET statuses/show/:id
                 # TODO: batch these to get up to 100 using statuses/lookup
-                status = self.api.get_status(prev_id)
+                earlier_status = self.api.get_status(earlier_id)
             except TweepError:
                 # no available status at that ID (deleted or nonexistent)
                 self.thread_queue.task_done()
                 continue
 
             # sanity check for content
-            if hasattr(status, 'user'):
+            if hasattr(earlier_status, "user"):
                 # recursive call records this status and asks for more parents
-                self.write_status_to_neo4j(status)
+                self.write_status_to_neo4j(earlier_status)
+                # add link to graph to recreate Twitter threading
+                links_to = LINKS_TO(later_status, earlier_status)
+                self.graph.merge(links_to)
 
             self.thread_queue.task_done()
 
