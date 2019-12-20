@@ -54,10 +54,10 @@ class MegatickStreamListener(tweepy.StreamListener):
                 filename = prefix + '_' + filename
 
             # Create a new file with that filename
-            csv_file = open(os.path.join(output_location, filename), 'w')
+            self.csv_file = open(os.path.join(output_location, filename), 'w')
 
             # create a csv writer
-            self.csv_writer = csv.writer(csv_file)
+            self.csv_writer = csv.writer(self.csv_file)
 
             # write a single row with the headers of the columns
             self.csv_writer.writerow(['text',
@@ -92,6 +92,10 @@ class MegatickStreamListener(tweepy.StreamListener):
                                       'source',
                                       'favorited',
                                       'retweet_count'])
+
+            # flush to force writing
+            self.csv_file.flush()
+
         # when using Neo4j graph, also retrieve sites and twitter threads
         else:
             self.thread_queue = Queue(maxsize=0)
@@ -284,6 +288,9 @@ class MegatickStreamListener(tweepy.StreamListener):
                                   status.source,
                                   status.favorited,
                                   status.retweet_count])
+
+        # flush to force writing
+        self.csv_file.flush()
 
     def write_status_to_neo4j(self, status):
         """
