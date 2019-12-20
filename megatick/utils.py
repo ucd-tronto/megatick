@@ -32,9 +32,10 @@ def is_notable(status, blacklist=None):
     #  model to make this decision.
     non_rt = status.text[0:2] != 'RT'
     if blacklist is None:
+        print("no blacklist!")
         whitelisted = True
     else:
-        whitelisted = status.user.id not in blacklist
+        whitelisted = status.user.id_str not in blacklist
     # if not whitelisted:
     #     print("blacklisted user " + status.user.name)
     return non_rt and whitelisted
