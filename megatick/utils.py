@@ -2,7 +2,6 @@
 Support functions for megatick modules.
 """
 
-import configparser
 import re
 
 import praw

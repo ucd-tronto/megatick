@@ -65,13 +65,13 @@ class Redditor(Node):
                  link_karma,
                  name):
         super().__init__("Redditor",
-                          comment_karma=comment_karma,
-                          created_at=created_at,
-                          has_verified_email=has_verified_email,
-                          user_id=user_id,
-                          is_mod=is_mod,
-                          link_karma=link_karma,
-                          name=name)
+                         comment_karma=comment_karma,
+                         created_at=created_at,
+                         has_verified_email=has_verified_email,
+                         user_id=user_id,
+                         is_mod=is_mod,
+                         link_karma=link_karma,
+                         name=name)
     def add_to(self, graph):
         """
         Add this node to an existing graph, or update it if it already exists.

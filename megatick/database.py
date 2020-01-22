@@ -1,3 +1,7 @@
+"""
+Utility functions relating to the Neo4j database.
+"""
+
 from megatick.utils import get_full_text
 from megatick.nodes import *
 from megatick.relations import *
@@ -66,11 +70,11 @@ def link_tweets(graph, from_status, to_status):
     if from_node is not None and to_node is not None:
         links_to = LINKS_TO(from_node, to_node)
         graph.merge(links_to)
-        return True
+        True
     else:
-        return False
+        False
 
-def reddit_to_neo4j(graph, submission, url_queue=None):
+def reddit_to_neo4j(graph, submission):
     """
     Given a JSON rep of a reddit submission, add it to the Neo4j database
     (or update)
@@ -111,4 +115,3 @@ def reddit_to_neo4j(graph, submission, url_queue=None):
 #         return True
 #     else:
 #         return False
-

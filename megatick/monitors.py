@@ -19,12 +19,10 @@ class Monitor(ABC):
     """A Monitor reads some sites/api and records the results"""
     def __init__(self):
         """Generic initalization"""
-        pass
 
     @abstractmethod
     def start(self):
         """Start reading and recording"""
-        pass
 
 class TwitterMonitor(Monitor):
     """Monitor a pre-determined set of users and keywords on Twitter."""
@@ -77,7 +75,7 @@ class TwitterMonitor(Monitor):
     def start(self):
         """Start up TwitterMonitor (through MegatickStreamListener)"""
         # access keyword stream for selected keyword(s)
-        stream_listener = MegatickStreamListener(api=self.api, 
+        stream_listener = MegatickStreamListener(api=self.api,
                                                  graph=self.graph)
         stream = tweepy.Stream(auth=self.api.auth,
                                listener=stream_listener)
@@ -113,19 +111,19 @@ class RedditMonitor(Monitor):
         else:
             self.graph = None
 
-        # read list of blacklisted user IDs to filter out. 
+        # read list of blacklisted user IDs to filter out.
         self.user_blacklist = None
         if self.conf.has_option("reddit", "userBlacklistLoc"):
-            userBlacklistLoc = self.conf.get("reddit", "userBlacklistLoc")
-            with open(userBlacklistLoc, "r") as bl_file:
+            user_blacklist_loc = self.conf.get("reddit", "userBlacklistLoc")
+            with open(user_blacklist_loc, "r") as bl_file:
                 self.user_blacklist = [line.strip() for line in bl_file]
 
         # read list of blacklisted terms and join them using | (or) for regex
         # searches
         self.kw_blacklist = None
         if self.conf.has_option("reddit", "keywordBlacklistLoc"):
-            kwBlacklistLoc = self.conf.get("reddit", "keywordBlacklistLoc")
-            with open(kwBlacklistLoc, "r") as bl_file:
+            kw_blacklist_loc = self.conf.get("reddit", "keywordBlacklistLoc")
+            with open(kw_blacklist_loc, "r") as bl_file:
                 pieces = [line.strip() for line in bl_file]
                 self.kw_blacklist = "|".join(pieces)
 
@@ -144,8 +142,8 @@ class RedditMonitor(Monitor):
         print("Monitoring: " + self.subreddits)
         self.reddit_thread = Thread(target=self.record_submission)
 
-        sr = self.reddit.subreddit(self.subreddits)
-        for submission in sr.stream.submissions():
+        stream = self.reddit.subreddit(self.subreddits).stream
+        for submission in stream.submissions():
             self.submission_queue.put(submission)
 
     def record_submission(self):

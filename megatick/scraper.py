@@ -4,17 +4,43 @@ Get markdown version of website body content in a threaded fashion
 
 import configparser
 import re
-import requests
 from bs4 import BeautifulSoup as bs
 from markdownify import markdownify as md
 from py2neo import NodeMatcher
 from queue import Queue
 from threading import Thread
 from urllib.parse import urlparse
+import requests
 
 from megatick.nodes import WebPage
 from megatick.relations import LINKS_TO
-from megatick.utils import create_graph, url_is_valid, partition
+from megatick.utils import create_graph, url_is_valid
+
+def retrieve_url(url):
+    """Retrieve the markdown version of a site given a URL"""
+    content = None
+    # TODO: remove cruft at the end of URLs, e.g. site.com/bob.html?u=103&t=7
+    if url_is_valid(url):
+        try:
+            response = requests.get(url)
+            if response.status_code != 200:
+                print("%d status code for %s" % (response.status_code, url))
+            elif re.match("^https?://twitter.com/", response.url):
+                print("tried to download a tweet")
+            elif response.status_code == 200:
+                soup = bs(response.content, features='html.parser')
+                body = soup.find('body')
+                if body is not None:
+                    print('found content for', url)
+                    content = md(str(body))
+        except requests.exceptions.ConnectionError as errc:
+            print("Error Connecting:", errc)
+        except requests.exceptions.Timeout as errt:
+            print("Timeout Error:", errt)
+        except requests.exceptions.RequestException as err:
+            print("Error:", err)
+
+    return content
 
 class Scraper:
     """
@@ -45,7 +71,7 @@ class Scraper:
         self.queue = Queue(maxsize=0)
         threads = []
         num_threads = conf.getint("DEFAULT", "numUrlThreads")
-        for i in range(num_threads):
+        for _ in range(num_threads):
             thread = Thread(target=self.add_urls)
             thread.start()
             threads.append(thread)
@@ -57,42 +83,17 @@ class Scraper:
         """
         match = self.matcher.match("WebPage", url=url).first()
         if match is None:
-            content = self.retrieve_url(url)
+            content = retrieve_url(url)
             if content is not None:
                 web_site = WebPage(url,
                                    content)
                 web_site.add_to(self.graph)
-                return web_site
+                web_site
             else:
-                return None
+                None
         else:
-            return match
+            match
 
-    def retrieve_url(self, url):
-        """Retrieve the markdown version of a site given a URL"""
-        content = None
-        # TODO: remove cruft at the end of URLs, e.g. site.com/bob.html?u=103&t=7
-        if url_is_valid(url):
-            try:
-                response = requests.get(url)
-                if response.status_code != 200:
-                    print("%d status code for %s" % (response.status_code, url))
-                elif re.match("^https?://twitter.com/", response.url):
-                    print("tried to download a tweet")
-                elif response.status_code == 200:
-                    soup = bs(response.content, features='html.parser')
-                    body = soup.find('body')
-                    if body is not None:
-                        print('found content for', url)
-                        content = md(str(body))
-            except requests.exceptions.ConnectionError as errc:
-                print("Error Connecting:", errc)
-            except requests.exceptions.Timeout as errt:
-                print("Timeout Error:", errt)
-            except requests.exceptions.RequestException as err:
-                print("Error:", err)
-
-        return content
 
     def remove_blacklisted(self, urls):
         """Filter out urls that match blacklisted domains"""
@@ -120,15 +121,15 @@ class Scraper:
 
             # connect citer (node) to WebPage nodes
             for web_page in web_pages:
-                    links_to = LINKS_TO(citer, web_page)
-                    self.graph.merge(links_to)
-                    # print('merged links_to')
+                links_to = LINKS_TO(citer, web_page)
+                self.graph.merge(links_to)
+                # print('merged links_to')
 
             self.queue.task_done()
 
     def link(self, citer, citees):
         """
-        Add a citer and its citees to the queue to be downloaded and 
+        Add a citer and its citees to the queue to be downloaded and
         linked
         """
         self.queue.put((citer, citees))

@@ -4,23 +4,20 @@ Custom listeners for monitoring cybersecurity tweets.
 
 import configparser
 import csv
-import json
 import os
 import sys
 import time
 
 from http.client import IncompleteRead as http_incompleteRead
 from queue import Queue
-from urllib3.exceptions import IncompleteRead as urllib3_incompleteRead
 from threading import Thread
+from urllib3.exceptions import IncompleteRead as urllib3_incompleteRead
 
 import tweepy
 
 from megatick.database import tweet_to_neo4j, link_tweets, get_tweet_node
-from megatick.nodes import Tweet, TwitterUser
-from megatick.relations import AUTHORED
 from megatick.scraper import Scraper
-from megatick.utils import get_full_text, get_urls, tweet_is_notable, create_twitter_auth
+from megatick.utils import get_full_text, get_urls, tweet_is_notable
 
 class MegatickStreamListener(tweepy.StreamListener):
     """A tweepy StreamListener with custom error handling."""
@@ -42,20 +39,20 @@ class MegatickStreamListener(tweepy.StreamListener):
         status_thread = Thread(target=self.record_status)
         status_thread.start()
 
-        # read list of blacklisted user IDs to filter out. 
+        # read list of blacklisted user IDs to filter out.
         # NB: long numbers (stored as strings) rather than handles which change
         self.user_blacklist = None
         if self.conf.has_option("twitter", "userBlacklistLoc"):
-            userBlacklistLoc = self.conf.get("twitter", "userBlacklistLoc")
-            with open(userBlacklistLoc, "r") as bl_file:
+            user_blacklist_loc = self.conf.get("twitter", "userBlacklistLoc")
+            with open(user_blacklist_loc, "r") as bl_file:
                 self.user_blacklist = [line.strip() for line in bl_file]
 
         # read list of blacklisted terms and join them using | (or) for regex
         # searches
         self.kw_blacklist = None
         if self.conf.has_option("twitter", "keywordBlacklistLoc"):
-            kwBlacklistLoc = self.conf.get("twitter", "keywordBlacklistLoc")
-            with open(kwBlacklistLoc, "r") as bl_file:
+            kw_blacklist_loc = self.conf.get("twitter", "keywordBlacklistLoc")
+            with open(kw_blacklist_loc, "r") as bl_file:
                 pieces = [line.strip() for line in bl_file]
                 self.kw_blacklist = "|".join(pieces)
 
@@ -129,6 +126,7 @@ class MegatickStreamListener(tweepy.StreamListener):
         # print("received data")
         try:
             super().on_data(raw_data)
+            return True
         except http_incompleteRead as error:
             print("http.client Incomplete Read error: %s" % str(error))
             print("Restarting stream search in 5 seconds...")
