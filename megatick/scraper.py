@@ -4,17 +4,18 @@ Get markdown version of website body content in a threaded fashion
 
 import configparser
 import re
-from bs4 import BeautifulSoup as bs
-from markdownify import markdownify as md
-from py2neo import NodeMatcher
 from queue import Queue
 from threading import Thread
 from urllib.parse import urlparse
 import requests
 
+from bs4 import BeautifulSoup as bs
+from markdownify import markdownify as md
+from py2neo import NodeMatcher
+
 from megatick.nodes import WebPage
 from megatick.relations import LINKS_TO
-from megatick.utils import create_graph, url_is_valid
+from megatick.utils import create_graph, url_is_valid, tidify_url
 
 def retrieve_url(url):
     """Retrieve the markdown version of a site given a URL"""
@@ -22,6 +23,7 @@ def retrieve_url(url):
     # TODO: remove cruft at the end of URLs, e.g. site.com/bob.html?u=103&t=7
     if url_is_valid(url):
         try:
+            url = tidify_url(url)
             response = requests.get(url)
             if response.status_code != 200:
                 print("%d status code for %s" % (response.status_code, url))
@@ -32,6 +34,8 @@ def retrieve_url(url):
                 body = soup.find('body')
                 if body is not None:
                     print('found content for', url)
+                    for script in soup(["script", "style", "img"]):
+                        script.decompose()
                     content = md(str(body))
         except requests.exceptions.ConnectionError as errc:
             print("Error Connecting:", errc)
@@ -94,7 +98,6 @@ class Scraper:
         else:
             match
 
-
     def remove_blacklisted(self, urls):
         """Filter out urls that match blacklisted domains"""
         if self.blacklist is None:
@@ -121,9 +124,10 @@ class Scraper:
 
             # connect citer (node) to WebPage nodes
             for web_page in web_pages:
-                links_to = LINKS_TO(citer, web_page)
-                self.graph.merge(links_to)
-                # print('merged links_to')
+                if citer is not None:
+                    links_to = LINKS_TO(citer, web_page)
+                    self.graph.merge(links_to)
+                    # print('merged links_to')
 
             self.queue.task_done()
 

@@ -3,6 +3,7 @@ Support functions for megatick modules.
 """
 
 import re
+from urllib.parse import urljoin, urlparse
 
 import praw
 import tweepy
@@ -152,3 +153,13 @@ def create_graph(conf):
     if graph is not None:
         print("Loaded Neo4j graph")
     return graph
+
+def tidify_url(url):
+    """
+    Remove query cruft at the end of URLs, e.g.
+    https://www.google.com/search?q=answer+to+life+the+universe+and+everything
+    becomes
+    https://www.google.com/search
+    NB: this changes the content extremely in some cases
+    """
+    return urljoin(url, urlparse(url).path)
