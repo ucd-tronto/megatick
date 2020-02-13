@@ -4,10 +4,15 @@ Define overarching monitor class that applies to different social media sites.
 
 from abc import ABC, abstractmethod
 import configparser
+from datetime import datetime
 import json
 from queue import Queue
+import requests
+import time
 from threading import Thread
 
+from bs4 import BeautifulSoup as bs
+import schedule
 import tweepy
 
 from megatick.database import reddit_to_neo4j
@@ -173,7 +178,7 @@ class RedditMonitor(Monitor):
             # Neo4j graph is available, so write to it
             if self.graph is not None:
             # else:
-                print("recording " + submission.permalink)
+                # print("recording " + submission.permalink)
                 # add tweet to Neo4j graph
                 _, submission_node, _ = reddit_to_neo4j(self.graph, submission)
                 # recursive call to follow outgoing links
@@ -182,3 +187,63 @@ class RedditMonitor(Monitor):
 
             # in case we need side effects for finishing a task, mark complete
             self.submission_queue.task_done()
+
+class RssMonitor(Monitor):
+    """Monitor a pre-determined set of users and keywords on Twitter."""
+    def __init__(self, conf=None):
+        """Initialization"""
+        # load default conf if none is provided
+        if conf is None:
+            # load default configuration
+            self.conf = configparser.ConfigParser()
+            self.conf.read("config.ini")
+        else:
+            self.conf = conf
+
+        # what RSS feeds to follow
+        # TODO: RSS feeds should be updated by an explorer module
+        # TODO: optional update granularity per feed?
+        self.feeds = ""
+        with open(self.conf.get("rss", "feedsLoc"), "r") as feed_file:
+            self.feeds = [line.strip() for line in feed_file]
+
+        # create Neo4j Graph object if necessary
+        if self.conf.getboolean("neo4j", "useNeo4j"):
+            print("Attempting to load graph")
+            self.graph = create_graph(self.conf)
+        else:
+            self.graph = None
+
+        # initialize scraper for external links
+        self.scraper = Scraper(self.conf, self.graph)
+
+    def check_rss(self):
+        """Read RSS feeds and add their item links to the scraper queue"""
+        print("Checking RSS feeds at " + str(datetime.now()))
+        for feed in self.feeds:
+            print("\t" + feed)
+            try:
+                response = requests.get(feed)
+                if response.status_code != 200:
+                    print("%d status code for %s" % (response.status_code, feed))
+                else:
+                    soup = bs(response.content, "xml")
+                    items = soup.find_all("item")
+                    links = [item.find("link").getText() for item in items]
+                    self.scraper.link(None, links)
+            except requests.exceptions.ConnectionError as errc:
+                print("Error Connecting:", errc)
+            except requests.exceptions.Timeout as errt:
+                print("Timeout Error:", errt)
+            except requests.exceptions.RequestException as err:
+                print("Error:", err)
+
+    def start(self):
+        """Start monitoring RSS feeds periodically"""
+        # schedule for one hour
+        # TODO: make scheduling configurable
+        schedule.every().hour.do(self.check_rss)
+
+        while True:
+            schedule.run_pending()
+            time.sleep(1)

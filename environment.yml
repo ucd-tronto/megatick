@@ -3,12 +3,15 @@ dependencies:
   - python>=3.7
   - pip
   - pylint
+  - scikit-learn
   - pip:
     - beautifulsoup4
     - feedparser
+    - lxml
     - markdownify
     - pandas
     - praw
     - py2neo
     - requests
+    - schedule
     - tweepy

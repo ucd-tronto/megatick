@@ -1,9 +1,5 @@
 #!/usr/bin/python3
 
-import configparser
-
-import praw
-
 from megatick.monitors import RedditMonitor
 
 def main():
